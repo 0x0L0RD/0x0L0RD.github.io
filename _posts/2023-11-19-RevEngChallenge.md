@@ -357,6 +357,3 @@ int main(){
 	puts("\n");
 }
 ```
-
-And the C solutions runs as expected:
-![](https://0x0l0rd.github.io/blog/assets/img/RE1/7.png)
