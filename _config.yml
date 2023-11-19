@@ -18,7 +18,7 @@ email: theodore.thobane@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
   In this post, I walk through how I went about hacking a binary that I found
   on the interwebs. 
-baseurl: "/blog/" # the subpath of your site, e.g. /blog
+baseurl: "/blog" # the subpath of your site, e.g. /blog
 url: "https://0x0l0rd.github.io" # the base hostname & protocol for your site, e.g. http://example.com
 github_username:  0x0L0RD
 
