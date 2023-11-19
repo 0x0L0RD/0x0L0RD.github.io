@@ -16,14 +16,13 @@
 title: Hacking a simple binary
 email: theodore.thobane@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
-  In this post, I walk through how I went about hacking a binary that I found
-  on the interwebs. 
+  Welcome to my personal blog. I talk reverse-engineering,
+  exploit development and all things malware development here. 
 baseurl: "/blog" # the subpath of your site, e.g. /blog
 url: "https://0x0l0rd.github.io" # the base hostname & protocol for your site, e.g. http://example.com
 github_username:  0x0L0RD
 
 # Build settings
-markdown: kramdown
 theme: minima
 plugins:
   - jekyll-feed
